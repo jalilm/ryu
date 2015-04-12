@@ -2552,6 +2552,7 @@ class OFPPortDescStatsRequest(OFPMultipartRequest):
     Attribute        Description
     ================ ======================================================
     flags            Zero or ``OFPMPF_REQ_MORE``
+    port_no          Port number to read (OFPP_ANY for all ports)
     ================ ======================================================
 
     Example::
@@ -2562,9 +2563,15 @@ class OFPPortDescStatsRequest(OFPMultipartRequest):
             req = ofp_parser.OFPPortDescStatsRequest(datapath, 0)
             datapath.send_msg(req)
     """
-    def __init__(self, datapath, flags=0, type_=None):
+    def __init__(self, datapath, flags=0, port_no=ofproto.OFPP_ANY, type_=None):
         super(OFPPortDescStatsRequest, self).__init__(datapath, flags)
+	self.port_no = port_no
 
+    def _serialize_stats_body(self):
+        msg_pack_into(ofproto.OFP_PORT_MULTIPART_REQUEST_PACK_STR,
+                      self.buf,
+                      ofproto.OFP_MULTIPART_REQUEST_SIZE,
+                      self.port_no)
 
 @OFPMultipartReply.register_stats_type()
 @_set_stats_type(ofproto.OFPMP_PORT_DESC, OFPPort)
@@ -6033,7 +6040,6 @@ class OFPBundleCtrlMsg(MsgBase):
             msg.properties.append(p)
 
         return msg
-
 
 @_set_msg_type(ofproto.OFPT_BUNDLE_ADD_MESSAGE)
 class OFPBundleAddMsg(MsgInMsgBase):
