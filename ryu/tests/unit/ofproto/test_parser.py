@@ -156,7 +156,7 @@ class Test_Parser(unittest.TestCase):
     """
 
     def __init__(self, methodName):
-        print('init ' + methodName)
+        print('init %s' % methodName)
         super(Test_Parser, self).__init__(methodName)
 
     def setUp(self):
@@ -227,7 +227,6 @@ def _add_tests():
     import os
     import os.path
     import fnmatch
-    import new
     import functools
 
     this_dir = os.path.dirname(sys.modules[__name__].__file__)
@@ -251,14 +250,13 @@ def _add_tests():
             method_name = ('test_' + file).replace('-', '_').replace('.', '_')
 
             def _run(self, name, wire_msg, json_str):
-                print ('processing %s ...' % name)
+                print('processing %s ...' % name)
                 self._test_msg(name, wire_msg, json_str)
-            print ('adding %s ...' % method_name)
+            print('adding %s ...' % method_name)
             f = functools.partial(_run, name=method_name, wire_msg=wire_msg,
                                   json_str=json_str)
             f.func_name = method_name
             f.__name__ = method_name
-            im = new.instancemethod(f, None, Test_Parser)
-            setattr(Test_Parser, method_name, im)
+            setattr(Test_Parser, method_name, f)
 
 _add_tests()
