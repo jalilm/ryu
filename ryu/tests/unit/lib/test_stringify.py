@@ -25,7 +25,7 @@ from ryu.lib import stringify
 
 class C1(stringify.StringifyMixin):
     def __init__(self, a, c):
-        print("init " + a + " " + c)
+        print("init %s %s" % (a, c))
         self.a = a
         self._b = 'B'
         self.c = c
@@ -52,13 +52,12 @@ class Test_stringify(unittest.TestCase):
         eq_(j, c.to_jsondict())
 
     def test_jsondict2(self):
-        import string
 
         def my_encode(x):
-            return string.lower(x)
+            return x.lower()
 
         def my_decode(x):
-            return string.upper(x)
+            return x.upper()
 
         j = {'C1': {'a': 'aaa', 'c': 'ccc'}}
         eq_(j['C1']['a'], my_encode('AAA'))
