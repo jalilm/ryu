@@ -25,11 +25,14 @@ from ryu.lib import addrconv
 from ryu.lib import mac
 from ryu.lib.pack_utils import msg_pack_into
 from ryu import utils
-from ryu.ofproto.ofproto_parser import StringifyMixin, MsgBase, MsgInMsgBase, msg_str_attr
+from ofproto_parser import StringifyMixin, MsgBase, MsgInMsgBase, msg_str_attr
 from . import ether
 from . import ofproto_parser
 from . import ofproto_common
 from . import ofproto_v1_5 as ofproto
+import logging
+
+logger = logging.getLogger(__name__)
 
 _MSG_PARSERS = {}
 
@@ -713,8 +716,12 @@ class OFPMatch(StringifyMixin):
             assert not kwargs
             self._fields2 = _ordered_fields
         else:
+            print "1"
+            print str(kwargs)
             kwargs = dict(ofproto.oxm_normalize_user(k, v) for
                           (k, v) in kwargs.iteritems())
+            print "2"
+            print str(kwargs)
             fields = [ofproto.oxm_from_user(k, v) for (k, v)
                       in kwargs.iteritems()]
             # assumption: sorting by OXM type values makes fields
@@ -3852,27 +3859,56 @@ class OFPExperimenterStatsReply(OFPMultipartReply):
     def __init__(self, datapath, type_=None, **kwargs):
         super(OFPExperimenterStatsReply, self).__init__(datapath, **kwargs)
 
+# flow_stats.duration_sec, flow_stats.duration_nsec, flow_stats.packet_count, flow_stats.byte_count
+#         self.duration_sec = duration_sec
+#         self.duration_nsec = duration_nsec
+#         self.packet_count = packet_count
+#         self.byte_count = byte_count
 
-class OFPFlowStats(StringifyMixin):
+class OFPStats(StringifyMixin):
+    def __init__(self, length=0, oxs_fields=None):
+        self.reserved = None
+        self.length = length
+        self.oxs_fields = oxs_fields
+
+    @classmethod
+    def parser(cls, buf, offset):
+        stats = cls()
+        (stats.reserved, stats.length) = struct.unpack_from(
+            ofproto.OFP_STATS_PACK_STR, buf, offset)
+        offset += ofproto.OFP_STATS_SIZE
+        length = stats.length
+
+        fields = []
+        while length > 0:
+            (num, value, field_len) = ofproto.oxs_parse(buf, offset)
+            k, uv = ofproto.oxs_to_user(num, value)
+            fields.append((k, uv))
+            offset += field_len
+            length -= field_len
+
+        stats.oxs_fields = fields
+        offset += ((stats.length + 7)/8*8 - stats.length)
+        return stats
+
+
+class OFPFlowDesc(StringifyMixin):
     def __init__(self, table_id=None, duration_sec=None, duration_nsec=None,
                  priority=None, idle_timeout=None, hard_timeout=None,
                  flags=None, importance=None, cookie=None, packet_count=None,
-                 byte_count=None, match=None, instructions=None,
-                 length=None):
-        super(OFPFlowStats, self).__init__()
-        self.length = 0
+                 byte_count=None, match=None, instructions=None, stats=None,
+                 length=0):
+        super(OFPFlowDesc, self).__init__()
+        self.length = length
         self.table_id = table_id
-        self.duration_sec = duration_sec
-        self.duration_nsec = duration_nsec
         self.priority = priority
         self.idle_timeout = idle_timeout
         self.hard_timeout = hard_timeout
         self.flags = flags
         self.importance = importance
         self.cookie = cookie
-        self.packet_count = packet_count
-        self.byte_count = byte_count
         self.match = match
+        self.stats = stats
         self.instructions = instructions
 
     @classmethod
@@ -3880,21 +3916,20 @@ class OFPFlowStats(StringifyMixin):
         flow_stats = cls()
 
         (flow_stats.length, flow_stats.table_id,
-         flow_stats.duration_sec, flow_stats.duration_nsec,
          flow_stats.priority, flow_stats.idle_timeout,
          flow_stats.hard_timeout, flow_stats.flags,
-         flow_stats.importance, flow_stats.cookie,
-         flow_stats.packet_count,
-         flow_stats.byte_count) = struct.unpack_from(
-            ofproto.OFP_FLOW_STATS_0_PACK_STR, buf, offset)
-        offset += ofproto.OFP_FLOW_STATS_0_SIZE
+         flow_stats.importance, flow_stats.cookie) = struct.unpack_from(
+            ofproto.OFP_FLOW_DESC_0_PACK_STR, buf, offset)
+        offset += ofproto.OFP_FLOW_DESC_0_SIZE
 
         flow_stats.match = OFPMatch.parser(buf, offset)
         match_length = utils.round_up(flow_stats.match.length, 8)
-        inst_length = (flow_stats.length - (ofproto.OFP_FLOW_STATS_SIZE -
-                                            ofproto.OFP_MATCH_SIZE +
-                                            match_length))
         offset += match_length
+        flow_stats.stats = OFPStats.parser(buf,offset)
+        inst_length = (flow_stats.length - ((ofproto.OFP_FLOW_DESC_SIZE -
+                                            ofproto.OFP_MATCH_SIZE +
+                                            match_length) + flow_stats.stats.length))
+        logger.info(str(inst_length))
         instructions = []
         while inst_length > 0:
             inst = OFPInstruction.parser(buf, offset)
@@ -3904,6 +3939,14 @@ class OFPFlowStats(StringifyMixin):
 
         flow_stats.instructions = instructions
         return flow_stats
+
+class OFPFlowStats(OFPFlowDesc):
+    def __init__(self, table_id=None, duration_sec=None, duration_nsec=None,
+                 priority=None, idle_timeout=None, hard_timeout=None,
+                 flags=None, importance=None, cookie=None, packet_count=None,
+                 byte_count=None, match=None, instructions=None,
+                 length=None):
+        super(OFPFlowStats, self).__init__()
 
 
 class OFPFlowStatsRequestBase(OFPMultipartRequest):
@@ -3973,6 +4016,60 @@ class OFPFlowStatsRequest(OFPFlowStatsRequestBase):
         super(OFPFlowStatsRequest, self).__init__(datapath, flags, table_id,
                                                   out_port, out_group,
                                                   cookie, cookie_mask, match)
+
+@_set_stats_type(ofproto.OFPMP_FLOW_DESC, OFPFlowStats)
+@_set_msg_type(ofproto.OFPT_MULTIPART_REQUEST)
+class OFPFlowDescRequest(OFPFlowStatsRequest):
+
+    def __init__(self, datapath, flags=0, table_id=ofproto.OFPTT_ALL,
+                 out_port=ofproto.OFPP_ANY,
+                 out_group=ofproto.OFPG_ANY,
+                 cookie=0, cookie_mask=0, match=None, type_=None):
+        if match is None:
+            match = OFPMatch()
+        super(OFPFlowDescRequest, self).__init__(datapath, flags, table_id,
+                                                  out_port, out_group,
+                                                  cookie, cookie_mask, match)
+
+@OFPMultipartReply.register_stats_type()
+@_set_stats_type(ofproto.OFPMP_FLOW_DESC, OFPFlowDesc)
+@_set_msg_type(ofproto.OFPT_MULTIPART_REPLY)
+class OFPFlowDescReply(OFPMultipartReply):
+    """
+    Individual flow statistics reply message
+
+    The switch responds with this message to an individual flow statistics
+    request.
+
+    ================ ======================================================
+    Attribute        Description
+    ================ ======================================================
+    body             List of ``OFPFlowStats`` instance
+    ================ ======================================================
+
+    Example::
+
+        @set_ev_cls(ofp_event.EventOFPDescStatsReply, MAIN_DISPATCHER)
+        def flow_stats_reply_handler(self, ev):
+            flows = []
+            for stat in ev.msg.body:
+                flows.append('table_id=%s '
+                             'duration_sec=%d duration_nsec=%d '
+                             'priority=%d '
+                             'idle_timeout=%d hard_timeout=%d flags=0x%04x '
+                             'importance=%d cookie=%d packet_count=%d '
+                             'byte_count=%d match=%s instructions=%s' %
+                             (stat.table_id,
+                              stat.duration_sec, stat.duration_nsec,
+                              stat.priority,
+                              stat.idle_timeout, stat.hard_timeout,
+                              stat.flags, stat.importance,
+                              stat.cookie, stat.packet_count, stat.byte_count,
+                              stat.match, stat.instructions))
+            self.logger.debug('FlowStats: %s', flows)
+    """
+    def __init__(self, datapath, type_=None, **kwargs):
+        super(OFPFlowDescReply, self).__init__(datapath, **kwargs)
 
 
 @OFPMultipartReply.register_stats_type()
@@ -4823,6 +4920,8 @@ class OFPInstruction(StringifyMixin):
     @classmethod
     def parser(cls, buf, offset):
         (type_, len_) = struct.unpack_from('!HH', buf, offset)
+        logger.info("OFPInstruction")
+        logger.info(str(type_))
         cls_ = cls._INSTRUCTION_TYPES.get(type_)
         return cls_.parser(buf, offset)
 
