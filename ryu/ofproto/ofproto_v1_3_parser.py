@@ -407,7 +407,7 @@ class OFPExperimenter(MsgBase):
                       self.experimenter, self.exp_type)
         self.buf += self.data
 
-
+@_register_parser
 @_set_msg_type(ofproto.OFPT_FEATURES_REQUEST)
 class OFPFeaturesRequest(MsgBase):
     """
@@ -429,6 +429,12 @@ class OFPFeaturesRequest(MsgBase):
     """
     def __init__(self, datapath):
         super(OFPFeaturesRequest, self).__init__(datapath)
+
+    @classmethod
+    def parser(cls, datapath, version, msg_type, msg_len, xid, buf):
+        msg = super(OFPFeaturesRequest, cls).parser(datapath, version, msg_type,
+                                                   msg_len, xid, buf)
+        return msg
 
 
 @_register_parser
@@ -555,7 +561,7 @@ class OFPGetConfigReply(MsgBase):
             ofproto.OFP_HEADER_SIZE)
         return msg
 
-
+@_register_parser
 @_set_msg_type(ofproto.OFPT_SET_CONFIG)
 class OFPSetConfig(MsgBase):
     """
@@ -596,6 +602,15 @@ class OFPSetConfig(MsgBase):
         msg_pack_into(ofproto.OFP_SWITCH_CONFIG_PACK_STR,
                       self.buf, ofproto.OFP_HEADER_SIZE,
                       self.flags, self.miss_send_len)
+
+    @classmethod
+    def parser(cls, datapath, version, msg_type, msg_len, xid, buf):
+        msg = super(OFPSetConfig, cls).parser(datapath, version, msg_type,
+                                                   msg_len, xid, buf)
+        msg.flags, msg.miss_send_len = struct.unpack_from(
+            ofproto.OFP_SWITCH_CONFIG_PACK_STR, msg.buf,
+            ofproto.OFP_HEADER_SIZE)
+        return msg
 
 
 UINT64_MAX = (1 << 64) - 1
