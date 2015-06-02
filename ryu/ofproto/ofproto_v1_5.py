@@ -388,7 +388,9 @@ oxm_types = [
     oxm_fields.OpenFlowBasic('in_phy_port', 1, type_desc.Int4),
     oxm_fields.OpenFlowBasic('metadata', 2, type_desc.Int8),
     oxm_fields.OpenFlowBasic('eth_dst', 3, type_desc.MacAddr),
+    oxm_fields.NiciraExtended0('eth_dst_nxm', 1, type_desc.MacAddr),
     oxm_fields.OpenFlowBasic('eth_src', 4, type_desc.MacAddr),
+    oxm_fields.NiciraExtended0('eth_src_nxm', 2, type_desc.MacAddr),
     oxm_fields.OpenFlowBasic('eth_type', 5, type_desc.Int2),
     oxm_fields.OpenFlowBasic('vlan_vid', 6, type_desc.Int2),
     oxm_fields.OpenFlowBasic('vlan_pcp', 7, type_desc.Int1),
@@ -423,6 +425,7 @@ oxm_types = [
     oxm_fields.OpenFlowBasic('mpls_bos', 36, type_desc.Int1),
     oxm_fields.OpenFlowBasic('pbb_isid', 37, type_desc.Int3),
     oxm_fields.OpenFlowBasic('tunnel_id', 38, type_desc.Int8),
+    oxm_fields.NiciraExtended1('tunnel_id_nxm', 16, type_desc.Int8),
     oxm_fields.OpenFlowBasic('ipv6_exthdr', 39, type_desc.Int2),
     oxm_fields.OpenFlowBasic('pbb_uca', 41, type_desc.Int1),
     oxm_fields.OpenFlowBasic('tcp_flags', 42, type_desc.Int2),
@@ -430,6 +433,7 @@ oxm_types = [
     oxm_fields.OpenFlowBasic('packet_type', 44, type_desc.Int4),
     oxm_fields.NiciraExtended1('tun_ipv4_src', 31, type_desc.IPv4Addr),
     oxm_fields.NiciraExtended1('tun_ipv4_dst', 32, type_desc.IPv4Addr),
+    oxm_fields.NiciraExtended1('conj_id', 37, type_desc.Int4),
 ]
 
 oxm_fields.generate(__name__)
